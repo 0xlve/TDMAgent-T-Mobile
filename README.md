@@ -5,6 +5,8 @@ RegGate-Agent
 
 This repository now includes an MVP webhook receiver for GitHub PR events.
 
+📘 User tutorial: [TUTORIAL.md](./TUTORIAL.md)
+
 ### Behavior
 - Verifies `X-Hub-Signature-256` with `WEBHOOK_SECRET`
 - Listens for `pull_request` events with actions `opened` and `synchronize`
