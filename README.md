@@ -1,35 +1,26 @@
 # TDMAgent-T-Mobile
+RegGate-Agent
 
-Minimal RegGate MVP implementation for pull request gating signals.
+## GitHub App Webhook MVP
+
+This repository now includes an MVP webhook receiver for GitHub PR events.
 
 📘 User tutorial: [TUTORIAL.md](./TUTORIAL.md)
 
-## Features
+### Behavior
+- Verifies `X-Hub-Signature-256` with `WEBHOOK_SECRET`
+- Listens for `pull_request` events with actions `opened` and `synchronize`
+- Posts a PR comment: `RegGate is running...` (when `GITHUB_TOKEN` is set)
 
-- Webhook receiver (`POST /webhook`) that echoes PR event metadata
-- GitHub client for posting PR comments (`RegGate is running...`)
-- TDP integration stub that returns a hardcoded dataset ID
-- TEC integration stub that returns a basic environment URL
-- AFT integration stub that returns smoke pass/fail
-- PR markdown formatter for human-readable results
-- Simple teardown scheduling with a delayed UTC timestamp
-
-## Run locally
-
+### Run locally
 ```bash
-python webhook_server.py
+pip install -r requirements.txt
+export WEBHOOK_SECRET="your-webhook-secret"
+export GITHUB_TOKEN="ghp_xxx" # token with permission to comment on PRs
+uvicorn reggate_agent.main:app --reload
 ```
 
-Then send a webhook payload to `http://localhost:8080/webhook`.
-
-To enable GitHub comment posting, set:
-
-```bash
-export GITHUB_TOKEN=<token>
-```
-
-## Test
-
+### Test
 ```bash
 pytest -q
 ```

@@ -1,64 +1,74 @@
-import json
-from datetime import datetime
+import hashlib
+import hmac
+from unittest.mock import AsyncMock
 
-from reggate_agent import MvpRunResult, format_pr_comment, process_event
+from fastapi.testclient import TestClient
+
+from reggate_agent import main as reggate_agent_main
 
 
-def test_format_pr_comment_contains_results():
-    result = MvpRunResult(
-        dataset_id="tdp-dataset-9999",
-        env_url="https://tec.local/env/example",
-        smoke_passed=True,
-        teardown_at="2026-07-22T19:00:00+00:00",
+def _signature(payload: bytes, secret: str) -> str:
+    digest = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+    return f"sha256={digest}"
+
+
+def test_webhook_rejects_invalid_signature(monkeypatch):
+    monkeypatch.setattr(reggate_agent_main, "WEBHOOK_SECRET", "test-secret")
+    client = TestClient(reggate_agent_main.app)
+
+    response = client.post(
+        "/webhook",
+        content=b'{"action":"opened"}',
+        headers={"X-Hub-Signature-256": "sha256=bad", "X-GitHub-Event": "pull_request"},
     )
 
-    comment = format_pr_comment(result)
-
-    assert "RegGate is running" in comment
-    assert "`tdp-dataset-9999`" in comment
-    assert "https://tec.local/env/example" in comment
-    assert "✅ PASS" in comment
-    assert "`2026-07-22T19:00:00+00:00`" in comment
+    assert response.status_code == 401
+    assert response.json() == {"error": "Invalid signature"}
 
 
-def test_process_event_for_pull_request_contains_mvp_results():
-    payload = {
-        "action": "opened",
-        "repository": {"full_name": "0xlve/TDMAgent-T-Mobile"},
-        "pull_request": {"number": 12},
-    }
-    headers = {"X-GitHub-Event": "pull_request"}
+def test_webhook_triggers_pull_request_handler(monkeypatch):
+    monkeypatch.setattr(reggate_agent_main, "WEBHOOK_SECRET", "test-secret")
+    handler = AsyncMock()
+    monkeypatch.setattr(reggate_agent_main, "handle_pr_trigger", handler)
 
-    result = process_event(headers=headers, payload=payload)
+    payload = (
+        b'{"action":"opened","pull_request":{"number":1,'
+        b'"head":{"sha":"abcdef0123456789","ref":"feature"},'
+        b'"base":{"repo":{"full_name":"octo/repo"}}}}'
+    )
+    client = TestClient(reggate_agent_main.app)
 
-    assert result["echo"]["event"] == "pull_request"
-    assert result["echo"]["pr_number"] == 12
-    assert result["mvp"]["dataset_id"].startswith("tdp-dataset-")
-    assert result["mvp"]["env_url"].startswith("https://")
-    assert isinstance(result["mvp"]["smoke_passed"], bool)
-    datetime.fromisoformat(result["mvp"]["teardown_at"])
-    assert "RegGate is running..." in result["mvp"]["comment_markdown"]
-    assert result["github_comment"]["status"] == "skipped"
+    response = client.post(
+        "/webhook",
+        content=payload,
+        headers={
+            "X-Hub-Signature-256": _signature(payload, "test-secret"),
+            "X-GitHub-Event": "pull_request",
+        },
+    )
 
-
-def test_process_event_for_non_pr_only_echoes():
-    payload = {"action": "ping", "repository": {"full_name": "0xlve/TDMAgent-T-Mobile"}}
-    headers = {"X-GitHub-Event": "ping"}
-
-    result = process_event(headers=headers, payload=payload)
-
-    assert result["echo"]["event"] == "ping"
-    assert result["message"] == "Ignored non-pull_request event."
-    assert "mvp" not in result
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    handler.assert_awaited_once()
 
 
-def test_webhook_handler_returns_json(client):
-    payload = {
-        "action": "opened",
-        "repository": {"full_name": "0xlve/TDMAgent-T-Mobile"},
-        "pull_request": {"number": 101},
-    }
-    response = client.post("/webhook", data=json.dumps(payload), headers={"X-GitHub-Event": "pull_request"})
-    assert response["status"] == 200
-    assert response["body"]["echo"]["pr_number"] == 101
-    assert "mvp" in response["body"]
+def test_webhook_ignores_non_trigger_actions(monkeypatch):
+    monkeypatch.setattr(reggate_agent_main, "WEBHOOK_SECRET", "test-secret")
+    handler = AsyncMock()
+    monkeypatch.setattr(reggate_agent_main, "handle_pr_trigger", handler)
+
+    payload = b'{"action":"closed","pull_request":{"number":1}}'
+    client = TestClient(reggate_agent_main.app)
+
+    response = client.post(
+        "/webhook",
+        content=payload,
+        headers={
+            "X-Hub-Signature-256": _signature(payload, "test-secret"),
+            "X-GitHub-Event": "pull_request",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    handler.assert_not_awaited()
