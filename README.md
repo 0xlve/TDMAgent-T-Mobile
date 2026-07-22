@@ -2,6 +2,8 @@
 
 Minimal RegGate MVP implementation for pull request gating signals.
 
+📘 User tutorial: [TUTORIAL.md](./TUTORIAL.md)
+
 ## Features
 
 - Webhook receiver (`POST /webhook`) that echoes PR event metadata
