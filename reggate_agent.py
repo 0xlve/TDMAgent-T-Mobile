@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
-from urllib import request
+from urllib import error, request
 
 
 @dataclass(frozen=True)
@@ -32,9 +32,14 @@ class GitHubClient:
         req.add_header("Authorization", "Bearer " + self.token)
         req.add_header("Accept", "application/vnd.github+json")
         req.add_header("Content-Type", "application/json")
-        with request.urlopen(req) as resp:  # nosec B310 - trusted GitHub API endpoint
-            response_body = resp.read().decode("utf-8")
-            return {"status": resp.status, "body": json.loads(response_body) if response_body else {}}
+        try:
+            with request.urlopen(req) as resp:  # nosec B310 - trusted GitHub API endpoint
+                response_body = resp.read().decode("utf-8")
+                return {"status": resp.status, "body": json.loads(response_body) if response_body else {}}
+        except error.HTTPError as exc:
+            return {"status": exc.code, "error": exc.reason}
+        except error.URLError as exc:
+            return {"status": "network_error", "error": str(exc.reason)}
 
 
 def is_pull_request_event(headers: Dict[str, str], payload: Dict[str, Any]) -> bool:
