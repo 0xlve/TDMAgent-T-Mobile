@@ -14,10 +14,13 @@ class WebhookHandler(BaseHTTPRequestHandler):
             self._send_json(404, {"error": "Not found"})
             return
 
-        content_length = int(self.headers.get("Content-Length", "0"))
-        raw_body = self.rfile.read(content_length) if content_length else b"{}"
         try:
-            payload = json.loads(raw_body.decode("utf-8"))
+            content_length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            self._send_json(400, {"error": "Invalid Content-Length header"})
+            return
+
+        raw_body = self.rfile.read(content_length) if content_length else b"{}"
         except json.JSONDecodeError:
             self._send_json(400, {"error": "Invalid JSON payload"})
             return
@@ -38,7 +41,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-def run_server(host: str = "0.0.0.0", port: int = 8080) -> None:
+def run_server(host: str = "127.0.0.1", port: int = 8080) -> None:
     server = HTTPServer((host, port), WebhookHandler)
     print(f"RegGate webhook server listening on http://{host}:{port}/webhook")
     server.serve_forever()

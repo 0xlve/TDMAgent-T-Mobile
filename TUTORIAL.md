@@ -21,7 +21,7 @@ Set this only if you want the service to post a comment to a real GitHub PR.
 export GITHUB_TOKEN=<your_github_token>
 ```
 
-If `GITHUB_TOKEN` is not set, the service still works and returns `github_comment: skipped`.
+If `GITHUB_TOKEN` is not set, the service still works and returns `github_comment.status: skipped`.
 
 ## 3) Start the webhook server
 
