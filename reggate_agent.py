@@ -121,8 +121,12 @@ def process_event(
     pr_number = payload.get("pull_request", {}).get("number")
 
     if github_client and repository and isinstance(pr_number, int):
-        owner, repo = repository.split("/", 1)
-        response["github_comment"] = github_client.post_issue_comment(owner, repo, pr_number, comment)
+        try:
+            owner, repo = repository.split("/", 1)
+        except ValueError:
+            response["github_comment"] = {"status": "skipped", "reason": "Invalid repository full_name."}
+        else:
+            response["github_comment"] = github_client.post_issue_comment(owner, repo, pr_number, comment)
     else:
         response["github_comment"] = {"status": "skipped", "reason": "Missing GitHub client or PR metadata."}
     return response
